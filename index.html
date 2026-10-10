@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis Sprachassistent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --c1:#00e5ff; --c2:#00b8d4; --c3:#18ffff;
+  --line:rgba(0,229,255,.28); --panel:rgba(0,229,255,.06);
+  --text:#d6faff; --dim:#6fb7c4;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{
+  min-height:100dvh;
+  background:radial-gradient(ellipse at 50% 25%,#07303f 0%,#02101a 55%,#000 100%);
+  color:var(--text);
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+  overflow-x:hidden;
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(0,229,255,.05) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,229,255,.05) 1px,transparent 1px);
+  background-size:42px 42px;
+  -webkit-mask-image:radial-gradient(ellipse at 50% 35%,#000 0%,transparent 75%);
+  mask-image:radial-gradient(ellipse at 50% 35%,#000 0%,transparent 75%);
+}
+.app{position:relative;max-width:780px;margin:0 auto;padding:18px 16px 28px;display:flex;flex-direction:column;gap:14px}
+h1{
+  text-align:center;font-family:'Orbitron','Segoe UI',sans-serif;font-weight:700;
+  letter-spacing:.45em;font-size:clamp(1.3rem,5vw,2rem);color:var(--c1);
+  text-shadow:0 0 12px var(--c1),0 0 32px rgba(0,229,255,.5);padding-left:.45em;
+}
+.sub{text-align:center;color:var(--dim);font-size:.75rem;letter-spacing:.25em;margin-top:-8px}
+
+/* HUD */
+.hud{--s:min(62vw,300px);--amp:1;width:var(--s);height:var(--s);margin:6px auto;position:relative}
+.ring{position:absolute;border-radius:50%}
+.r1{inset:0;border:2px dashed rgba(0,229,255,.35);animation:spin 40s linear infinite}
+.r2{
+  inset:5%;
+  background:conic-gradient(from 0deg,transparent 0 50%,rgba(0,229,255,.18) 70%,var(--c1) 100%);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 6px),#000 calc(100% - 5px));
+  mask:radial-gradient(farthest-side,transparent calc(100% - 6px),#000 calc(100% - 5px));
+  filter:drop-shadow(0 0 7px var(--c1));
+  animation:spin 5s linear infinite;
+}
+.r3{
+  inset:12%;
+  background:repeating-conic-gradient(rgba(0,229,255,.75) 0 1.2deg,transparent 1.2deg 7.5deg);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 7px),#000 calc(100% - 6px));
+  mask:radial-gradient(farthest-side,transparent calc(100% - 7px),#000 calc(100% - 6px));
+  animation:spinrev 28s linear infinite;
+}
+.r4{
+  inset:19%;border:1px solid rgba(0,229,255,.5);
+  box-shadow:0 0 18px rgba(0,229,255,.3),inset 0 0 18px rgba(0,229,255,.25);
+}
+.core-wrap{position:absolute;inset:27%;transform:scale(var(--amp));transition:transform .09s ease-out}
+.core-wrap::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--c1);opacity:0}
+.core{
+  width:100%;height:100%;border-radius:50%;
+  background:radial-gradient(circle at 50% 38%,#eaffff 0%,#86f5ff 18%,#00e5ff 42%,#0089a3 72%,#003443 100%);
+  box-shadow:0 0 30px 6px rgba(0,229,255,.55),0 0 90px 22px rgba(0,229,255,.25),inset 0 0 30px rgba(255,255,255,.35);
+  animation:pulse 4s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{transform:scale(.93);filter:brightness(.88)}50%{transform:scale(1.04);filter:brightness(1.15)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes spinrev{to{transform:rotate(-360deg)}}
+@keyframes ripple{0%{transform:scale(1);opacity:.75}100%{transform:scale(2.2);opacity:0}}
+
+body[data-state=listening][data-awake="1"] .core{animation-duration:2s}
+body[data-state=listening][data-awake="1"] .core-wrap::after{animation:ripple 1.8s ease-out infinite}
+body[data-state=listening][data-awake="0"] .core{filter:saturate(.6)}
+body[data-state=thinking] .r2{animation-duration:.9s}
+body[data-state=thinking] .r3{animation-duration:6s}
+body[data-state=thinking] .core{animation-duration:1s}
+body[data-state=speaking] .core{animation-duration:.7s;box-shadow:0 0 40px 10px rgba(0,229,255,.75),0 0 120px 30px rgba(0,229,255,.35),inset 0 0 34px rgba(255,255,255,.45)}
+body[data-state=speaking] .r2{animation-duration:2.2s}
+
+.status{text-align:center;font-family:'Orbitron','Segoe UI',sans-serif;font-size:.78rem;letter-spacing:.3em;color:var(--c1);padding-left:.3em}
+.transcript{text-align:center;color:var(--dim);font-style:italic;min-height:1.3em;font-size:.95rem}
+
+/* Chat */
+.chat{
+  height:min(38vh,330px);overflow-y:auto;padding:12px;border-radius:14px;
+  border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(6px);
+  display:flex;flex-direction:column;gap:8px;
+  box-shadow:0 0 24px rgba(0,229,255,.08) inset;
+}
+.chat:empty::before{content:"Sage oder tippe einen Befehl ...";color:var(--dim);margin:auto;font-size:.9rem}
+.msg{max-width:88%;padding:8px 12px;border-radius:12px;line-height:1.45;font-size:.95rem;white-space:pre-line;overflow-wrap:anywhere}
+.msg small{display:block;font-family:'Orbitron','Segoe UI',sans-serif;font-size:.58rem;letter-spacing:.22em;color:var(--c1);margin-bottom:3px}
+.msg.user{align-self:flex-end;background:rgba(0,229,255,.16);border:1px solid var(--line)}
+.msg.bot{align-self:flex-start;background:rgba(0,0,0,.4);border:1px solid rgba(0,229,255,.18)}
+.msg a{display:inline-block;margin-top:6px;color:var(--c3);word-break:break-all}
+
+.timers{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;min-height:0}
+.timer{border:1px solid var(--c1);border-radius:999px;padding:4px 14px;font-family:'Orbitron','Segoe UI',sans-serif;font-size:.78rem;color:var(--c3);box-shadow:0 0 12px rgba(0,229,255,.3)}
+
+/* Eingabe */
+.row{display:flex;gap:8px}
+input[type=text],input[type=password]{
+  flex:1;min-width:0;background:rgba(0,0,0,.45);border:1px solid var(--line);color:var(--text);
+  padding:12px 14px;border-radius:12px;font-size:16px;outline:none;
+}
+input[type=text]:focus,input[type=password]:focus{border-color:var(--c1);box-shadow:0 0 14px rgba(0,229,255,.4)}
+.btn{
+  background:rgba(0,229,255,.08);color:var(--c1);border:1px solid var(--c1);
+  padding:11px 16px;border-radius:12px;cursor:pointer;font-weight:600;font-size:.9rem;
+  font-family:inherit;transition:background .2s,box-shadow .2s,color .2s;
+}
+.btn:hover:not(:disabled){background:rgba(0,229,255,.2);box-shadow:0 0 14px rgba(0,229,255,.5)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn.on{background:var(--c1);color:#00252d;box-shadow:0 0 16px rgba(0,229,255,.7)}
+.btn.primary{background:var(--c1);color:#00252d}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+
+details{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px 14px}
+summary{cursor:pointer;color:var(--c1);font-size:.85rem;letter-spacing:.1em}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{background:transparent;border:1px solid var(--line);color:var(--text);border-radius:999px;padding:6px 12px;font-size:.8rem;cursor:pointer;font-family:inherit}
+.chip:hover{border-color:var(--c1);color:var(--c3)}
+
+.cam{width:min(100%,320px);margin:0 auto;border:1px solid var(--c1);border-radius:14px;overflow:hidden;box-shadow:0 0 22px rgba(0,229,255,.4)}
+.cam video{display:block;width:100%;transform:scaleX(-1);background:#000}
+.msg img{display:block;max-width:100%;border-radius:10px;margin-top:6px;border:1px solid var(--line)}
+.note{color:var(--dim);font-size:.82rem;line-height:1.5;margin:10px 0}
+.keyrow{display:flex;gap:8px;flex-wrap:wrap}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important}
+}
+</style>
+</head>
+<body data-state="idle">
+<div class="app">
+  <h1>JARVIS</h1>
+  <div class="sub">DEIN SPRACHASSISTENT</div>
+
+  <div class="hud" id="hud">
+    <div class="ring r1"></div>
+    <div class="ring r2"></div>
+    <div class="ring r3"></div>
+    <div class="ring r4"></div>
+    <div class="core-wrap"><div class="core"></div></div>
+  </div>
+
+  <div class="status" id="status">BEREIT</div>
+  <div class="transcript" id="transcript"></div>
+
+  <div class="timers" id="timers"></div>
+
+  <div class="cam" id="camBox" hidden><video id="camVideo" autoplay playsinline muted></video></div>
+  <canvas id="camCanvas" hidden></canvas>
+
+  <div class="chat" id="chat" aria-live="polite"></div>
+
+  <form class="row" id="form" autocomplete="off">
+    <input type="text" id="input" placeholder="Befehl eintippen ..." enterkeyhint="send" autocomplete="off" aria-label="Befehl eingeben">
+    <button class="btn primary" type="submit">Senden</button>
+  </form>
+
+  <div class="controls">
+    <button class="btn" id="micStart" type="button">Mikrofon starten</button>
+    <button class="btn" id="micStop" type="button" disabled>Mikrofon stoppen</button>
+    <button class="btn" id="muteBtn" type="button">Stummschalten</button>
+    <button class="btn" id="clearBtn" type="button">Verlauf löschen</button>
+    <button class="btn" id="wakeBtn" type="button">Hey Jarvis: an</button>
+    <button class="btn" id="camBtn" type="button">Kamera einschalten</button>
+    <button class="btn" id="photoBtn" type="button">Foto aufnehmen</button>
+  </div>
+
+  <details>
+    <summary>BEFEHLE ZUM AUSPROBIEREN</summary>
+    <div class="chips" id="chips"></div>
+  </details>
+
+  <details>
+    <summary>KI MODUS (OPTIONAL)</summary>
+    <p class="note">Mit einem Anthropic API Schlüssel kann Jarvis frei mit dir reden und beschreiben, was die Kamera sieht. Der Schlüssel wird nur in deinem Browser gespeichert. Die Nutzung der API kostet Geld, und die Datei sollte danach nicht weitergegeben werden.</p>
+    <div class="keyrow">
+      <input type="password" id="keyInput" placeholder="API Schlüssel" autocomplete="off" aria-label="API Schlüssel">
+      <button class="btn" id="keySave" type="button">Speichern</button>
+      <button class="btn" id="keyRemove" type="button">Entfernen</button>
+    </div>
+    <p class="note" id="keyState"></p>
+  </details>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ---------- Elemente ---------- */
+  const $ = s => document.querySelector(s);
+  const chat = $('#chat'), form = $('#form'), input = $('#input');
+  const micStart = $('#micStart'), micStop = $('#micStop'), muteBtn = $('#muteBtn'), clearBtn = $('#clearBtn');
+  const wakeBtn = $('#wakeBtn'), camBtn = $('#camBtn'), photoBtn = $('#photoBtn');
+  const camBox = $('#camBox'), camVideo = $('#camVideo'), camCanvas = $('#camCanvas');
+  const keyInput = $('#keyInput'), keySave = $('#keySave'), keyRemove = $('#keyRemove'), keyState = $('#keyState');
+  const statusEl = $('#status'), transcriptEl = $('#transcript'), hud = $('#hud'), timersEl = $('#timers');
+
+  /* ---------- Zustand ---------- */
+  let micOn = false, recRunning = false, speaking = false, thinking = 0, muted = false;
+  let wakeMode = true, awakeUntil = 0, keepAwake = false, camStream = null;
+  const AWAKE_MS = 25000;
+  const isAwake = () => !wakeMode || Date.now() < awakeUntil;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let pending = null, rec = null, ampTimer = null, deVoice = null, watchTimer = null;
+  let lastJoke = -1;
+
+  const LABELS = { idle: 'BEREIT', listening: 'ICH HÖRE ZU', thinking: 'VERARBEITE', speaking: 'ICH SPRECHE' };
+
+  function updateState() {
+    let st = 'idle';
+    if (speaking) st = 'speaking';
+    else if (thinking > 0) st = 'thinking';
+    else if (micOn) st = 'listening';
+    document.body.dataset.state = st;
+    const awake = isAwake();
+    document.body.dataset.awake = awake ? '1' : '0';
+    statusEl.textContent = (st === 'listening' && !awake ? 'WARTE AUF HEY JARVIS' : LABELS[st]) + (muted ? ' · STUMM' : '');
+    if (st === 'speaking') {
+      if (!ampTimer) ampTimer = setInterval(() => hud.style.setProperty('--amp', (0.93 + Math.random() * 0.2).toFixed(2)), 90);
+    } else {
+      clearInterval(ampTimer); ampTimer = null;
+      hud.style.setProperty('--amp', 1);
+    }
+  }
+
+  /* ---------- Chat ---------- */
+  function addMsg(who, text, link, img) {
+    const d = document.createElement('div');
+    d.className = 'msg ' + who;
+    const s = document.createElement('small');
+    s.textContent = who === 'user' ? 'DU' : 'JARVIS';
+    d.appendChild(s);
+    d.appendChild(document.createTextNode(text));
+    if (img) {
+      const i = document.createElement('img');
+      i.src = img; i.alt = 'Bild';
+      d.appendChild(i);
+    }
+    (Array.isArray(link) ? link : link ? [link] : []).forEach(l => {
+      d.appendChild(document.createElement('br'));
+      const a = document.createElement('a');
+      a.href = l.url;
+      if (/^https?:/.test(l.url)) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+      if (l.download) a.download = 'jarvis-foto.jpg';
+      a.textContent = l.label || l.url;
+      d.appendChild(a);
+    });
+    chat.appendChild(d);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  let hintTimer = null;
+  function hint(text, ms = 3000) {
+    transcriptEl.textContent = text;
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => { if (transcriptEl.textContent === text) transcriptEl.textContent = ''; }, ms);
+  }
+
+  /* ---------- Sprachausgabe ---------- */
+  function pickVoice() {
+    if (!('speechSynthesis' in window)) return;
+    const v = speechSynthesis.getVoices();
+    deVoice =
+      v.find(x => /^de[-_]DE/i.test(x.lang) && /google/i.test(x.name)) ||
+      v.find(x => /^de[-_]DE/i.test(x.lang)) ||
+      v.find(x => /^de/i.test(x.lang)) || null;
+  }
+  if ('speechSynthesis' in window) {
+    pickVoice();
+    speechSynthesis.onvoiceschanged = pickVoice;
+  }
+
+  function finishSpeaking() {
+    if (!speaking) return;
+    if (speechSynthesis.speaking || speechSynthesis.pending) return;
+    speaking = false;
+    clearInterval(watchTimer); watchTimer = null;
+    if (keepAwake) { awakeUntil = Date.now() + AWAKE_MS; keepAwake = false; }
+    updateState();
+    resumeRec();
+  }
+
+  function speak(text) {
+    if (muted || !text || !('speechSynthesis' in window)) return;
+    const parts = text.match(/[^.!?\n]+[.!?]*/g) || [text];
+    speaking = true;
+    if (isAwake()) keepAwake = true;
+    pauseRec();
+    updateState();
+    parts.forEach(p => {
+      const chunk = p.trim();
+      if (!chunk) return;
+      const u = new SpeechSynthesisUtterance(chunk);
+      u.lang = 'de-DE';
+      if (deVoice) u.voice = deVoice;
+      u.rate = 1; u.pitch = 0.92;
+      u.onend = u.onerror = () => setTimeout(finishSpeaking, 150);
+      speechSynthesis.speak(u);
+    });
+    if (!watchTimer) watchTimer = setInterval(finishSpeaking, 600);
+  }
+
+  function stopSpeaking() {
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    setTimeout(finishSpeaking, 200);
+  }
+
+  /* ---------- Spracherkennung ---------- */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function initRec() {
+    if (!SR) return;
+    rec = new SR();
+    rec.lang = 'de-DE';
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.onstart = () => { recRunning = true; updateState(); };
+    rec.onend = () => {
+      recRunning = false;
+      transcriptEl.textContent = '';
+      if (micOn && !speaking) setTimeout(tryStart, 250);
+      updateState();
+    };
+    rec.onerror = e => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        setMic(false);
+        addMsg('bot', 'Der Zugriff auf das Mikrofon wurde nicht erlaubt. Bitte erlaube das Mikrofon in der Adressleiste deines Browsers oder nutze das Textfeld.');
+      } else if (e.error === 'network') {
+        setMic(false);
+        addMsg('bot', 'Die Spracherkennung braucht eine Internetverbindung und ist gerade nicht erreichbar.');
+      } else if (e.error === 'audio-capture') {
+        setMic(false);
+        addMsg('bot', 'Es wurde kein Mikrofon gefunden.');
+      }
+    };
+    rec.onresult = e => {
+      let interim = '', fin = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) fin += r[0].transcript; else interim += r[0].transcript;
+      }
+      if (fin.trim()) { transcriptEl.textContent = ''; onVoice(fin.trim()); }
+      else transcriptEl.textContent = interim;
+    };
+  }
+
+  function tryStart() {
+    if (!rec || !micOn || speaking || recRunning) return;
+    try { rec.start(); recRunning = true; }
+    catch (e) { setTimeout(tryStart, 400); }
+  }
+  function pauseRec() { if (rec && recRunning) { try { rec.abort(); } catch (e) {} } }
+  function resumeRec() { if (micOn) setTimeout(tryStart, 300); }
+
+  function setMic(on) {
+    micOn = on;
+    micStart.disabled = on || !SR;
+    micStop.disabled = !on;
+    micStart.classList.toggle('on', on);
+    if (!on && rec) { try { rec.abort(); } catch (e) {} }
+    if (on) tryStart();
+    updateState();
+  }
+
+  /* ---------- Töne ---------- */
+  let ac = null;
+  function audio() {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+    } catch (e) {}
+    return ac;
+  }
+  ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => audio(), { once: true }));
+
+  function beep(n = 4) {
+    const c = audio(); if (!c) return;
+    for (let i = 0; i < n; i++) {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = 'sine'; o.frequency.value = i % 2 ? 988 : 1318;
+      const t0 = c.currentTime + i * 0.32;
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(0.25, t0 + 0.02);
+      g.gain.linearRampToValueAtTime(0, t0 + 0.26);
+      o.connect(g); g.connect(c.destination);
+      o.start(t0); o.stop(t0 + 0.3);
+    }
+  }
+
+  /* ---------- Hilfsfunktionen ---------- */
+  const pad = n => String(n).padStart(2, '0');
+  const enc = encodeURIComponent;
+  const rnd = n => Math.floor(Math.random() * n);
+
+  function openUrl(url) {
+    const w = window.open(url, '_blank');
+    if (w) { try { w.opener = null; } catch (e) {} return true; }
+    return false;
+  }
+
+  function fmtNum(n) {
+    return Number.isInteger(n) ? n.toLocaleString('de-DE') : n.toLocaleString('de-DE', { maximumFractionDigits: 6 });
+  }
+  function fmtTemp(n) {
+    const r = Math.round(n);
+    return (r < 0 ? 'minus ' + Math.abs(r) : r) + ' Grad';
+  }
+  function joinDe(arr) {
+    if (arr.length <= 1) return arr.join('');
+    return arr.slice(0, -1).join(', ') + ' und ' + arr[arr.length - 1];
+  }
+  function fmtDur(sec) {
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60, p = [];
+    if (h) p.push(h + (h === 1 ? ' Stunde' : ' Stunden'));
+    if (m) p.push(m + (m === 1 ? ' Minute' : ' Minuten'));
+    if (s) p.push(s + (s === 1 ? ' Sekunde' : ' Sekunden'));
+    return joinDe(p);
+  }
+  function greeting() {
+    const h = new Date().getHours();
+    return (h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend') + '! Wie kann ich dir helfen?';
+  }
+
+  /* ---------- Webseiten und Suche ---------- */
+  const SITES = {
+    youtube:  { name: 'YouTube',   home: 'https://www.youtube.com', search: q => 'https://www.youtube.com/results?search_query=' + enc(q) },
+    google:   { name: 'Google',    home: 'https://www.google.com',  search: q => 'https://www.google.com/search?q=' + enc(q) },
+    wikipedia:{ name: 'Wikipedia', home: 'https://de.wikipedia.org', search: q => 'https://de.wikipedia.org/w/index.php?search=' + enc(q) }
+  };
+  const W = String.raw`(?:you\s?tube|google|wikipedia)`;
+  const SITE_PATS = [
+    new RegExp(String.raw`(?:such|find|schau|guck|spiel|zeig)\w*\s+(?:mir\s+)?(?:auf|bei|in)\s+${W}\s+(?:nach\s+)?(.+)$`, 'i'),
+    new RegExp(String.raw`${W}\s+(?:und\s+)?(?:such|find)\w*\s+(?:nach\s+)?(.+)$`, 'i'),
+    new RegExp(String.raw`(?:such|find|schau|guck|spiel|zeig)\w*\s+(?:mir\s+)?(?:nach\s+)?(.+?)\s+(?:auf|bei|in)\s+${W}$`, 'i'),
+    new RegExp(String.raw`(?:was sagt|was steht (?:bei|in))\s+${W}\s+(?:über|zu)\s+(.+)$`, 'i'),
+    new RegExp(String.raw`^${W}\s+(?:über\s+|zu\s+|nach\s+)?(.+)$`, 'i')
+  ];
+
+  function openSite(key, query) {
+    const S = SITES[key];
+    const url = query ? S.search(query) : S.home;
+    const ok = openUrl(url);
+    const base = query ? `Ich suche bei ${S.name} nach ${query}.` : `Ich öffne ${S.name}.`;
+    const extra = ok ? '' : ' Das neue Tab wurde blockiert. Klicke auf den Link oder erlaube Pop ups für diese Seite.';
+    return { text: base + extra, speech: base + extra, link: { url, label: query ? `${S.name}: ${query}` : S.name } };
+  }
+
+  function webSearch(q) {
+    const url = SITES.google.search(q);
+    const ok = openUrl(url);
+    const base = `Ich suche im Internet nach ${q}.`;
+    const extra = ok ? '' : ' Das neue Tab wurde blockiert. Klicke auf den Link oder erlaube Pop ups für diese Seite.';
+    return { text: base + extra, speech: base + extra, link: { url, label: `Ergebnisse für ${q}` } };
+  }
+
+  /* ---------- Rechnen ---------- */
+  const NUMW = { null:0, eins:1, ein:1, eine:1, zwei:2, drei:3, vier:4, fünf:5, sechs:6, sieben:7, acht:8, neun:9, zehn:10, elf:11, zwölf:12, zwanzig:20, dreißig:30, vierzig:40, fünfzig:50, sechzig:60, siebzig:70, achtzig:80, neunzig:90, hundert:100, tausend:1000 };
+
+  function tryMath(t) {
+    let e = t;
+    if (!/(plus|minus|mal|geteilt|durch|hoch|wurzel|prozent|quadrat|%|\d\s*[+\-*/x×÷^]\s*\d)/.test(e)) return null;
+    e = e.replace(/(\d),(\d)/g, '$1.$2');
+    e = e.replace(/(was ist|was ergibt|wie ?viel(?:e)? (?:ist|sind|ergibt|macht)|rechne mir aus|rechne|berechne|berechnen|bitte|kannst du|ergibt|ist gleich|gleich|macht|das ergebnis von|ergebnis von)/g, ' ');
+    e = e.replace(/\b(eins|ein|eine|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf|zwanzig|dreißig|vierzig|fünfzig|sechzig|siebzig|achtzig|neunzig|hundert|tausend|null)\b/g, w => NUMW[w]);
+    e = e.trim().replace(/[=?]+$/, '').trim();
+
+    let m = e.match(/(\d+(?:\.\d+)?)\s*(?:prozent|%)\s*von\s*(\d+(?:\.\d+)?)/);
+    if (m) {
+      const r = parseFloat(m[1]) * parseFloat(m[2]) / 100;
+      return { exprText: `${fmtNum(parseFloat(m[1]))} Prozent von ${fmtNum(parseFloat(m[2]))}`, result: r };
+    }
+    m = e.match(/(?:quadrat)?wurzel\s*(?:aus|von)?\s*(\d+(?:\.\d+)?)/);
+    if (m) {
+      const r = Math.sqrt(parseFloat(m[1]));
+      return { exprText: `Wurzel aus ${fmtNum(parseFloat(m[1]))}`, result: r };
+    }
+
+    e = e.replace(/geteilt durch|dividiert durch|teilen durch/g, '/')
+         .replace(/multipliziert mit|mal|×/g, '*')
+         .replace(/(\d)\s*x\s*(\d)/g, '$1*$2')
+         .replace(/plus/g, '+').replace(/minus/g, '-')
+         .replace(/zum quadrat/g, '**2').replace(/hoch/g, '**')
+         .replace(/\bdurch\b/g, '/').replace(/÷/g, '/').replace(/\^/g, '**');
+
+    if (!/^[\d\s+\-*/().]+$/.test(e)) return null;
+    if (/\d\s+\d/.test(e)) return null;
+    if (!/\d/.test(e) || !/[+\-*/]/.test(e.replace(/^\s*-/, ''))) return null;
+    let r;
+    try { r = Function('"use strict";return (' + e + ')')(); } catch (err) { return null; }
+    if (typeof r !== 'number' || Number.isNaN(r)) return null;
+    const exprText = e.replace(/\s+/g, ' ').trim()
+      .replace(/\*\*/g, ' hoch ').replace(/\*/g, ' mal ').replace(/\//g, ' geteilt durch ')
+      .replace(/\+/g, ' plus ').replace(/-/g, ' minus ').replace(/\s+/g, ' ').trim()
+      .replace(/(\d)\.(\d)/g, '$1,$2');
+    return { exprText, result: r };
+  }
+
+  /* ---------- Timer ---------- */
+  const timers = [];
+  let timerSeq = 0;
+  const NUMT = { ein:1, eine:1, einen:1, einer:1, eins:1, zwei:2, drei:3, vier:4, fünf:5, sechs:6, sieben:7, acht:8, neun:9, zehn:10, elf:11, zwölf:12, fünfzehn:15, zwanzig:20, dreißig:30, vierzig:40, fünfundvierzig:45, fünfzig:50, sechzig:60, halbe:0.5, halb:0.5, anderthalb:1.5 };
+
+  function parseDuration(t) {
+    let total = 0, found = false;
+    if (/viertelstunde/.test(t)) { total += 900; found = true; t = t.replace('viertelstunde', ' '); }
+    const re = /(\d+(?:[.,]\d+)?|[a-zäöüß]+)\s*(sekunden?|sek|minuten?|min|stunden?|std)(?![a-zäöüß])/g;
+    let m;
+    while ((m = re.exec(t))) {
+      const v = /^\d/.test(m[1]) ? parseFloat(m[1].replace(',', '.')) : NUMT[m[1]];
+      if (v == null) continue;
+      const mult = /^sek/.test(m[2]) ? 1 : /^min/.test(m[2]) ? 60 : 3600;
+      total += v * mult; found = true;
+    }
+    return found && total > 0 ? Math.round(total) : 0;
+  }
+
+  function startTimer(sec) {
+    if (sec > 86400) return 'Ein Timer kann höchstens 24 Stunden laufen.';
+    const id = ++timerSeq;
+    const label = fmtDur(sec);
+    const handle = setTimeout(() => fireTimer(id), sec * 1000);
+    timers.push({ id, end: Date.now() + sec * 1000, label, handle });
+    renderTimers();
+    return `Timer gestellt auf ${label}.`;
+  }
+
+  function fireTimer(id) {
+    const i = timers.findIndex(x => x.id === id);
+    if (i < 0) return;
+    const t = timers.splice(i, 1)[0];
+    renderTimers();
+    beep(4);
+    const text = `Dein Timer über ${t.label} ist abgelaufen.`;
+    addMsg('bot', text);
+    setTimeout(() => speak(text), 1500);
+  }
+
+  function cancelTimers() {
+    const n = timers.length;
+    timers.forEach(t => clearTimeout(t.handle));
+    timers.length = 0;
+    renderTimers();
+    return n ? (n === 1 ? 'Der Timer wurde abgebrochen.' : `Alle ${n} Timer wurden abgebrochen.`) : 'Es läuft gerade kein Timer.';
+  }
+
+  function remaining(sec) {
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return (h ? h + ':' : '') + pad(m) + ':' + pad(s);
+  }
+  function renderTimers() {
+    timersEl.innerHTML = '';
+    const now = Date.now();
+    timers.forEach(t => {
+      const d = document.createElement('div');
+      d.className = 'timer';
+      d.textContent = remaining(Math.max(0, Math.ceil((t.end - now) / 1000)));
+      timersEl.appendChild(d);
+    });
+  }
+  setInterval(() => { if (timers.length) renderTimers(); }, 1000);
+
+  /* ---------- Notizen ---------- */
+  const NOTE_KEY = 'jarvis_notes';
+  function getNotes() { try { return JSON.parse(localStorage.getItem(NOTE_KEY) || '[]'); } catch (e) { return []; } }
+  function setNotes(a) { try { localStorage.setItem(NOTE_KEY, JSON.stringify(a)); } catch (e) {} }
+
+  function saveNote(text) {
+    text = text.trim();
+    if (!text) { pending = 'note'; return 'Was soll ich notieren?'; }
+    text = text.charAt(0).toUpperCase() + text.slice(1);
+    const n = getNotes(); n.push({ text, ts: Date.now() }); setNotes(n);
+    return `Notiz gespeichert: ${text}`;
+  }
+  function readNotes() {
+    const n = getNotes();
+    if (!n.length) return 'Du hast keine Notizen gespeichert.';
+    const head = n.length === 1 ? 'Du hast eine Notiz.' : `Du hast ${n.length} Notizen.`;
+    const text = head + '\n' + n.map((x, i) => `Notiz ${i + 1}: ${x.text}`).join('\n');
+    return { text, speech: head + ' ' + n.map((x, i) => `Notiz ${i + 1}: ${x.text}.`).join(' ') };
+  }
+  function deleteNotes(t) {
+    const n = getNotes();
+    if (!n.length) return 'Es sind keine Notizen vorhanden.';
+    const num = t.match(/notiz\s*(?:nummer\s*)?(\d+)|(\d+)\.?\s*notiz/);
+    if (/\balle/.test(t)) { setNotes([]); return n.length === 1 ? 'Die Notiz wurde gelöscht.' : `Alle ${n.length} Notizen wurden gelöscht.`; }
+    if (/letzte/.test(t)) { const r = n.pop(); setNotes(n); return `Die letzte Notiz wurde gelöscht: ${r.text}`; }
+    if (num) {
+      const i = parseInt(num[1] || num[2], 10) - 1;
+      if (i >= 0 && i < n.length) { const r = n.splice(i, 1)[0]; setNotes(n); return `Notiz ${i + 1} wurde gelöscht: ${r.text}`; }
+      return `Eine Notiz mit der Nummer ${i + 1} gibt es nicht.`;
+    }
+    return 'Sage zum Beispiel: alle Notizen löschen, letzte Notiz löschen oder Notiz 2 löschen.';
+  }
+
+  /* ---------- Wetter ---------- */
+  const WMO = {
+    0: 'klarer Himmel', 1: 'überwiegend klar', 2: 'teilweise bewölkt', 3: 'bedeckt',
+    45: 'Nebel', 48: 'Nebel mit Reif', 51: 'leichter Nieselregen', 53: 'Nieselregen', 55: 'starker Nieselregen',
+    56: 'gefrierender Nieselregen', 57: 'starker gefrierender Nieselregen',
+    61: 'leichter Regen', 63: 'Regen', 65: 'starker Regen', 66: 'gefrierender Regen', 67: 'starker gefrierender Regen',
+    71: 'leichter Schneefall', 73: 'Schneefall', 75: 'starker Schneefall', 77: 'Schneegriesel',
+    80: 'leichte Regenschauer', 81: 'Regenschauer', 82: 'heftige Regenschauer', 85: 'leichte Schneeschauer', 86: 'starke Schneeschauer',
+    95: 'Gewitter', 96: 'Gewitter mit Hagel', 99: 'Gewitter mit starkem Hagel'
+  };
+
+  async function getJson(url) {
+    const ctl = new AbortController();
+    const to = setTimeout(() => ctl.abort(), 9000);
+    try {
+      const r = await fetch(url, { signal: ctl.signal });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    } finally { clearTimeout(to); }
+  }
+
+  function cityFrom(s) {
+    const m = s.match(/\b(?:in|für|fuer|von|bei|nach)\s+(.+)$/i);
+    let c = m ? m[1] : s;
+    c = c.replace(/\b(heute|morgen|jetzt|gerade|aktuell|aktuelle|aktuellen|momentan|bitte|eigentlich|draußen|draussen|wetterbericht|wetter|vorhersage|temperatur|das|wie|ist|wird|es|sag|sage|mir|was|wo|wann|regnet|scheint|die|der|dem|warm|kalt|viel|grad)\b/gi, ' ')
+         .replace(/[?!.,]/g, ' ').replace(/\s+/g, ' ').trim();
+    return c;
+  }
+
+  async function weather(city) {
+    if (!city) {
+      try { city = localStorage.getItem('jarvis_city') || ''; } catch (e) {}
+    }
+    if (!city) { pending = 'weather'; return 'Für welche Stadt soll ich das Wetter abrufen?'; }
+    try {
+      const geo = await getJson(`https://geocoding-api.open-meteo.com/v1/search?name=${enc(city)}&count=1&language=de&format=json`);
+      if (!geo.results || !geo.results.length) return `Ich konnte die Stadt ${city} nicht finden.`;
+      const p = geo.results[0];
+      const w = await getJson(`https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=1`);
+      const c = w.current, d = w.daily;
+      try { localStorage.setItem('jarvis_city', p.name); } catch (e) {}
+      const desc = WMO[c.weather_code] || 'wechselhaft';
+      const rain = d.precipitation_probability_max ? d.precipitation_probability_max[0] : null;
+      const lo = Math.round(d.temperature_2m_min[0]), hi = Math.round(d.temperature_2m_max[0]);
+      const text =
+        `Wetter in ${p.name}\n` +
+        `Temperatur: ${Math.round(c.temperature_2m)} °C (gefühlt ${Math.round(c.apparent_temperature)} °C)\n` +
+        `Himmel: ${desc}\n` +
+        `Heute: ${lo} bis ${hi} °C` + (rain != null ? `, Regenwahrscheinlichkeit ${rain} %` : '') + '\n' +
+        `Wind: ${Math.round(c.wind_speed_10m)} km/h, Luftfeuchtigkeit ${c.relative_humidity_2m} %`;
+      const speech =
+        `In ${p.name} sind es aktuell ${fmtTemp(c.temperature_2m)}, gefühlt ${fmtTemp(c.apparent_temperature)}. ` +
+        `Es ist ${desc}. Heute werden zwischen ${fmtTemp(lo).replace(' Grad', '')} und ${fmtTemp(hi)} erwartet` +
+        (rain != null ? `, bei einer Regenwahrscheinlichkeit von ${rain} Prozent.` : '.') +
+        ` Der Wind weht mit ${Math.round(c.wind_speed_10m)} Kilometern pro Stunde.`;
+      return { text, speech };
+    } catch (e) {
+      return 'Die Wetterdaten sind gerade nicht erreichbar. Bitte prüfe deine Internetverbindung.';
+    }
+  }
+
+  /* ---------- Spaß ---------- */
+  const JOKES = [
+    'Was macht ein Pirat am Computer? Er drückt die Enter Taste.',
+    'Warum können Geister so schlecht lügen? Weil man sie so leicht durchschaut.',
+    'Was sagt ein großer Stift zum kleinen Stift? Wachsmalstift.',
+    'Warum tragen Java Entwickler eine Brille? Weil sie C Sharp nicht sehen können.',
+    'Treffen sich zwei Magnete. Sagt der eine: Was soll ich heute nur anziehen?',
+    'Was ist grün und klopft an die Tür? Ein Klopfsalat.',
+    'Wie nennt man einen Bumerang, der nicht zurückkommt? Stock.',
+    'Was macht ein Clown im Büro? Faxen.',
+    'Warum hat der Computer Schnupfen? Er hat zu viele Fenster offen.',
+    'Was sagt ein Fisch, wenn er gegen die Wand schwimmt? Damm.',
+    'Was ist braun, klebrig und läuft durch die Wüste? Ein Karamel.',
+    'Warum ging die Mathelehrerin zum Arzt? Sie hatte zu viele Probleme.'
+  ];
+
+  /* ---------- Hey Jarvis ---------- */
+  const WAKE_SRC = String.raw`\b(?:hey|hi|hallo|ok|okay)?\s*(?:jarvis|dscharwis|tscharwis|charwis|jarwis|jarvies|jarvins|dschavis|tschavis)\b[,.!:]?`;
+  const WAKE_RE = new RegExp(WAKE_SRC, 'gi');
+  const WAKE_TEST = new RegExp(WAKE_SRC, 'i');
+
+  function onVoice(text) {
+    if (!text) return;
+    const hasWake = WAKE_TEST.test(text);
+    if (!isAwake() && !hasWake) { hint('Ignoriert: ' + text, 2500); return; }
+    const rest = text.replace(WAKE_RE, ' ').replace(/\s+/g, ' ').trim();
+    awakeUntil = Date.now() + AWAKE_MS;
+    updateState();
+    if (!rest) { addMsg('user', text); respond('Ja, ich höre.'); return; }
+    handle(rest);
+  }
+
+  /* ---------- Kamera ---------- */
+  async function startCam() {
+    if (camStream) return '';
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+      return 'Dein Browser erlaubt hier keine Kamera. Öffne die Datei in Chrome oder Edge.';
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      camVideo.srcObject = camStream;
+      camBox.hidden = false;
+      try { await camVideo.play(); } catch (e) {}
+      camBtn.classList.add('on'); camBtn.textContent = 'Kamera ausschalten';
+      return '';
+    } catch (e) {
+      camStream = null;
+      if (e && e.name === 'NotAllowedError') return 'Der Zugriff auf die Kamera wurde nicht erlaubt. Erlaube die Kamera in der Adressleiste deines Browsers.';
+      if (e && e.name === 'NotFoundError') return 'Ich habe keine Kamera gefunden.';
+      return 'Die Kamera konnte nicht gestartet werden. Vielleicht nutzt gerade eine andere App sie.';
+    }
+  }
+  function stopCam() {
+    if (camStream) camStream.getTracks().forEach(t => t.stop());
+    camStream = null;
+    camVideo.srcObject = null;
+    camBox.hidden = true;
+    camBtn.classList.remove('on'); camBtn.textContent = 'Kamera einschalten';
+  }
+  function grabFrame() {
+    if (!camStream || !camVideo.videoWidth) return null;
+    const w = Math.min(1024, camVideo.videoWidth);
+    const h = Math.round(camVideo.videoHeight * w / camVideo.videoWidth);
+    camCanvas.width = w; camCanvas.height = h;
+    camCanvas.getContext('2d').drawImage(camVideo, 0, 0, w, h);
+    const url = camCanvas.toDataURL('image/jpeg', 0.85);
+    return { url, b64: url.split(',')[1] };
+  }
+  async function ensureCam() {
+    if (camStream) return '';
+    const err = await startCam();
+    if (err) return err;
+    await sleep(1000);
+    return '';
+  }
+  async function takePhoto() {
+    const err = await ensureCam();
+    if (err) return err;
+    const f = grabFrame();
+    if (!f) return 'Ich bekomme noch kein Bild von der Kamera. Versuche es gleich noch einmal.';
+    return { text: 'Foto aufgenommen.', img: f.url, link: { url: f.url, label: 'Foto speichern', download: true } };
+  }
+  async function describeCam(question) {
+    if (!getKey()) return 'Dafür brauche ich einen KI Schlüssel. Trage ihn unten im Bereich KI Modus ein. Bis dahin kann ich dir das Kamerabild nur zeigen und Fotos aufnehmen.';
+    const err = await ensureCam();
+    if (err) return err;
+    const f = grabFrame();
+    if (!f) return 'Ich bekomme noch kein Bild von der Kamera. Versuche es gleich noch einmal.';
+    const ans = await askClaude(`Der Nutzer zeigt dir etwas mit der Kamera und sagt: "${question}". Antworte direkt darauf und sage, was du auf dem Bild siehst.`, f.b64);
+    return { text: ans, img: f.url };
+  }
+
+  /* ---------- KI Modus (optional) ---------- */
+  const convo = [];
+  const getKey = () => 'server'; // Der Schlüssel liegt ausschließlich in Netlify, niemals im Browser.
+
+  async function askClaude(text, b64) {
+    convo.push({ role: 'user', content: text });
+    while (convo.length > 12) convo.shift();
+    const messages = convo.map(m => ({ role: m.role, content: m.content }));
+    const now = new Date().toLocaleString('de-DE', { dateStyle: 'full', timeStyle: 'short' });
+    const ctl = new AbortController();
+    const to = setTimeout(() => ctl.abort(), 30000);
+    try {
+      const r = await fetch('/.netlify/functions/jarvis', {
+        method: 'POST', signal: ctl.signal,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ messages, image: b64 || null, now })
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        convo.pop();
+        if (r.status === 401) return 'Der KI-Schlüssel in Netlify wurde nicht akzeptiert. Prüfe OPENAI_API_KEY.';
+        if (r.status === 429) return 'Das KI-Limit wurde erreicht. Prüfe dein API-Guthaben und versuche es später erneut.';
+        if (r.status === 404) return 'Die KI-Funktion wurde nicht veröffentlicht. Prüfe die Netlify-Dateistruktur und starte einen neuen Deploy.';
+        return data.error || 'Die KI ist gerade nicht erreichbar. Prüfe die Netlify-Funktionsprotokolle.';
+      }
+      const out = String(data.reply || '').trim();
+      convo.push({ role: 'assistant', content: out || '...' });
+      return out || 'Dazu fällt mir gerade nichts ein.';
+    } catch (e) {
+      convo.pop();
+      return e.name === 'AbortError' ? 'Die Anfrage dauert zu lange. Versuche es bitte erneut.' : 'Die KI-Verbindung fehlgeschlagen. Prüfe, ob die Netlify-Funktion veröffentlicht wurde.';
+    } finally { clearTimeout(to); }
+  }
+
+  /* ---------- Apps und Zeigen ---------- */
+  const APPS = [
+    { re: /spotify/, name: 'Spotify', proto: 'spotify:', web: 'https://open.spotify.com' },
+    { re: /whats\s?app/, name: 'WhatsApp', proto: 'whatsapp://', web: 'https://web.whatsapp.com' },
+    { re: /discord/, name: 'Discord', proto: 'discord://', web: 'https://discord.com/app' },
+    { re: /telegram/, name: 'Telegram', proto: 'tg://', web: 'https://web.telegram.org' },
+    { re: /steam/, name: 'Steam', proto: 'steam://open/main', web: 'https://store.steampowered.com' },
+    { re: /\bteams\b/, name: 'Microsoft Teams', proto: 'msteams:', web: 'https://teams.microsoft.com' },
+    { re: /\bzoom\b/, name: 'Zoom', proto: 'zoommtg://', web: 'https://zoom.us' },
+    { re: /(e-?mail|\bmail\b|postfach)/, name: 'Mail', proto: 'mailto:', web: 'https://mail.google.com' },
+    { re: /taschenrechner/, name: 'Taschenrechner', proto: 'ms-calculator:', web: 'https://www.google.com/search?q=taschenrechner' },
+    { re: /kalender/, name: 'Kalender', web: 'https://calendar.google.com' },
+    { re: /classroom/, name: 'Google Classroom', web: 'https://classroom.google.com' },
+    { re: /\bdrive\b/, name: 'Google Drive', web: 'https://drive.google.com' },
+    { re: /\bdocs\b/, name: 'Google Docs', web: 'https://docs.google.com' },
+    { re: /\bword\b/, name: 'Word', web: 'https://www.office.com/launch/word' },
+    { re: /\bexcel\b/, name: 'Excel', web: 'https://www.office.com/launch/excel' },
+    { re: /powerpoint/, name: 'PowerPoint', web: 'https://www.office.com/launch/powerpoint' },
+    { re: /netflix/, name: 'Netflix', web: 'https://www.netflix.com' },
+    { re: /instagram/, name: 'Instagram', web: 'https://www.instagram.com' },
+    { re: /tiktok/, name: 'TikTok', web: 'https://www.tiktok.com' },
+    { re: /twitch/, name: 'Twitch', web: 'https://www.twitch.tv' },
+    { re: /reddit/, name: 'Reddit', web: 'https://www.reddit.com' },
+    { re: /amazon/, name: 'Amazon', web: 'https://www.amazon.de' }
+  ];
+  const APP_VERB = /(öffn|start|geh(?:e)?\s+(?:bitte\s+)?(?:auf|zu|in|zur|zum)|wechsle?\s+(?:bitte\s+)?(?:zu|auf|zur|zum)|mach\w*\s+.*\bauf\b)/;
+
+  function launchProto(url) {
+    const a = document.createElement('a');
+    a.href = url; a.style.display = 'none';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  function openApp(app) {
+    const links = [];
+    let text = `Ich öffne ${app.name}.`;
+    if (app.proto) {
+      launchProto(app.proto);
+      text += ' Falls dein Browser fragt, bestätige das Öffnen der App.';
+      links.push({ url: app.proto, label: `${app.name} App öffnen` });
+      if (app.web) links.push({ url: app.web, label: `${app.name} im Browser` });
+    } else {
+      const ok = openUrl(app.web);
+      if (!ok) text += ' Das neue Tab wurde blockiert. Klicke auf den Link oder erlaube Pop ups für diese Seite.';
+      links.push({ url: app.web, label: `${app.name} im Browser` });
+    }
+    return { text, speech: text, link: links };
+  }
+
+  function tabResult(url, say, label) {
+    const ok = openUrl(url);
+    const text = say + (ok ? '' : ' Das neue Tab wurde blockiert. Klicke auf den Link oder erlaube Pop ups für diese Seite.');
+    return { text, speech: text, link: { url, label } };
+  }
+
+  function showStuff(s) {
+    let m;
+    if ((m = s.match(/(?:route|weg|navigier\w*)\s+(?:nach|zu|zum|zur)\s+(.+)$/i)) || (m = s.match(/wie komme ich (?:nach|zu|zum|zur)\s+(.+)$/i)))
+      return tabResult(`https://www.google.com/maps/dir/?api=1&destination=${enc(m[1])}`, `Ich zeige dir die Route nach ${m[1]}.`, `Route: ${m[1]}`);
+    if ((m = s.match(/zeig\w*\s+(?:mir\s+)?(.+?)\s+auf\s+(?:der\s+)?(?:karte|maps)$/i)) || (m = s.match(/(?:karte|maps)\s+(?:von|für|vom)\s+(.+)$/i)) || (m = s.match(/wo\s+(?:ist|liegt|befindet sich)\s+(.+)$/i)))
+      return tabResult(`https://www.google.com/maps/search/?api=1&query=${enc(m[1])}`, `Ich zeige dir ${m[1]} auf der Karte.`, `Karte: ${m[1]}`);
+    if ((m = s.match(/\b(?:bilder|fotos)\s+(?:von|über|zu|vom)\s+(.+)$/i)))
+      return tabResult(`https://www.google.com/search?tbm=isch&q=${enc(m[1])}`, `Ich zeige dir Bilder von ${m[1]}.`, `Bilder: ${m[1]}`);
+    if ((m = s.match(/\b(?:videos?|tutorials?)\s+(?:über|zu|von|vom)\s+(.+)$/i)))
+      return tabResult(SITES.youtube.search(m[1]), `Ich suche ein Video über ${m[1]}.`, `YouTube: ${m[1]}`);
+    return null;
+  }
+
+  /* ---------- Befehlsverarbeitung ---------- */
+  async function route(raw) {
+    const s = raw.trim()
+      .replace(/^(?:(?:hey|hallo|hi|ok|okay)\s+)?jarvis\s*[,.!:]?\s*/i, '')
+      .replace(/[.!?]+$/, '').trim();
+    const t = s.toLowerCase();
+    if (!s) return greeting();
+
+    // Rückfragen
+    if (pending) {
+      const p = pending; pending = null;
+      if (/^(abbrechen|vergiss es|egal|nein|stopp?)$/.test(t)) return 'Okay, abgebrochen.';
+      if (p === 'note') return saveNote(s);
+      if (p === 'weather') return weather(cityFrom(s) || s);
+      if (p === 'timer') {
+        const d = parseDuration(t) || (/^\d+$/.test(t) ? parseInt(t, 10) * 60 : 0);
+        if (d) return startTimer(d);
+      }
+    }
+
+    // Stopp
+    if (/^(stopp?|sei (still|ruhig)|ruhe|halt die klappe)$/.test(t)) { stopSpeaking(); return { text: 'Okay.', speak: false }; }
+
+    // Begrüßung und Smalltalk
+    if (/^(hallo|hi|hey|moin|servus|guten (morgen|tag|abend))\b/.test(t)) return greeting();
+    if (/^(tschüss|tschuess|auf wiedersehen|bis (später|bald|dann)|gute nacht|das war's|das wars)/.test(t))
+      return { text: 'Bis später! Sage einfach Hey Jarvis, wenn du mich brauchst.', sleep: true };
+    if (/^(danke|vielen dank|dankeschön|dankeschoen)/.test(t)) return 'Gern geschehen!';
+    if (/wie geht('?s| es) (dir|ihnen)/.test(t)) return 'Alle Systeme laufen einwandfrei. Danke der Nachfrage!';
+    if (/(wer bist du|wie heißt du|wie heisst du|stell dich vor)/.test(t)) return 'Ich bin Jarvis, dein persönlicher Sprachassistent.';
+    if (/(hilfe|was kannst du|was kannst du alles|befehle)/.test(t))
+      return 'Ich kann Uhrzeit und Datum sagen, das Wetter abrufen, rechnen, Timer stellen und Notizen verwalten. Ich suche im Internet, öffne Tabs, Karten, Bilder und Apps wie Spotify oder WhatsApp. Mit der Kamera mache ich Fotos, und mit KI Schlüssel beschreibe ich, was du mir zeigst. Außerdem erzähle ich Witze, werfe Münzen und würfle.';
+
+    // Kamera
+    const camWord = /(kamera|webcam)/.test(t);
+    if (camWord && /(aus\b|ausschalt|ausmachen|stopp|schließ|beend|deaktivier|abschalt)/.test(t)) { stopCam(); return 'Kamera ausgeschaltet.'; }
+    if (camWord && /(\ban\b|\bein\b|einschalt|anschalt|anmachen|start|aktivier|öffn|aufmachen)/.test(t)) {
+      const err = await startCam();
+      return err || 'Kamera ist an. Zeig mir etwas und frage mich, was ich sehe.';
+    }
+    if (/(foto|selfie|bild)/.test(t) && /(mach|nimm|schieß|schiess|aufnehm|knips)/.test(t)) return takePhoto();
+    if (/(was siehst du|was ist das|was zeige ich|was halte ich|schau (?:mal )?(?:hier|her|dir)|kannst du (?:das|es) sehen|beschreibe (?:das|was|mir)|was habe ich (?:hier|in der hand)|lies (?:das|den text)|siehst du (?:das|was))/.test(t)) return describeCam(s);
+
+    // Timer
+    if (/\b(timer|wecker)\b/.test(t) || /erinner\w*\s+mich/.test(t)) {
+      if (/(stopp|stop|abbrech|lösch|beend|ausschalt|deaktivier)/.test(t)) return cancelTimers();
+      if (/(wie lange|restzeit|läuft|laufen|noch)/.test(t) && !parseDuration(t)) {
+        if (!timers.length) return 'Es läuft gerade kein Timer.';
+        const now = Date.now();
+        const parts = timers.map(x => fmtDur(Math.max(1, Math.ceil((x.end - now) / 1000))));
+        return `Noch ${joinDe(parts)}.`;
+      }
+      const d = parseDuration(t);
+      if (d) return startTimer(d);
+      pending = 'timer';
+      return 'Wie lange soll der Timer laufen? Zum Beispiel 5 Minuten.';
+    }
+
+    // Notizen
+    if (/notiz/.test(t) && /(l[öo]sch|entfern|leer)/.test(t)) return deleteNotes(t);
+    if (/notiz/.test(t) && /(vorles|vorlese|\blies\b|\blese\b|zeig|nenne|auflist|anhören|welche|was steht|meine notizen|alle notizen|notizen$)/.test(t) && !/^(merk|notier|schreib)/.test(t)) return readNotes();
+    const savePats = [
+      /(?:speicher|erstell|mach)\w*\s+(?:mir\s+)?(?:eine\s+|die\s+)?(?:neue\s+)?notiz(?:\s+(?:mit dem inhalt|dass))?\s*[:,]?\s*(.*)$/i,
+      /^(?:neue\s+)?notiz\b(?:\s+speichern)?\s*[:,]?\s*(.*)$/i,
+      /(?:merk\w*\s+(?:dir|mir)|notier\w*(?:\s+mir)?|schreib\w*\s+(?:mir\s+)?auf)\s*[:,]?\s*(?:dass\s+)?(.*)$/i
+    ];
+    for (const re of savePats) { const m = s.match(re); if (m) return saveNote(m[1] || ''); }
+
+    // Wetter
+    if (/(wetter|temperatur|regnet|wie warm|wie kalt|scheint die sonne)/.test(t)) return weather(cityFrom(s));
+
+    // Münze, Würfel, Witz
+    if (/(münze|muenze|kopf oder zahl)/.test(t)) return `Die Münze zeigt: ${Math.random() < 0.5 ? 'Kopf' : 'Zahl'}.`;
+    if (/w(?:ü|ue)rf/.test(t)) {
+      const sm = t.match(/(\d+)\s*(?:seiten|seitig)/) || t.match(/\bw(\d+)\b/) || t.match(/\bd(\d+)\b/);
+      let sides = sm ? parseInt(sm[1], 10) : 6;
+      if (sides < 2 || sides > 1000) sides = 6;
+      const cm = t.match(/(zwei|2|drei|3|vier|4)\s*w(?:ü|ue)rfel/);
+      const count = cm ? ({ zwei: 2, 2: 2, drei: 3, 3: 3, vier: 4, 4: 4 })[cm[1]] : 1;
+      const rolls = Array.from({ length: count }, () => 1 + rnd(sides));
+      if (count === 1) return `Gewürfelt: ${rolls[0]}.`;
+      return `Gewürfelt: ${joinDe(rolls.map(String))}. Die Summe ist ${rolls.reduce((a, b) => a + b, 0)}.`;
+    }
+    if (/witz/.test(t)) {
+      let i; do { i = rnd(JOKES.length); } while (i === lastJoke && JOKES.length > 1);
+      lastJoke = i; return JOKES[i];
+    }
+
+    // Uhrzeit und Datum
+    const wantTime = /(wie\s*sp[äa]t|uhrzeit|wie\s*viel\s*uhr|wieviel\s*uhr|wie\s*spaet|die zeit)/.test(t);
+    const wantDate = /(datum|welcher tag|welchen tag|der wievielte|wochentag|welches datum|heute.*\btag\b)/.test(t);
+    if (wantTime || wantDate) {
+      const now = new Date(), h = now.getHours(), m = now.getMinutes(), out = [];
+      if (wantTime) out.push(m === 0 ? `Es ist genau ${h} Uhr.` : `Es ist ${h} Uhr ${m}.`);
+      if (wantDate) out.push('Heute ist ' + now.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + '.');
+      return { text: (wantTime ? `${pad(h)}:${pad(m)} Uhr\n` : '') + out.join(' '), speech: out.join(' ') };
+    }
+
+    // Apps
+    if (APP_VERB.test(t)) {
+      const app = APPS.find(a => a.re.test(t));
+      if (app) return openApp(app);
+      const dm = t.match(/([a-z0-9\-]+\.(?:de|com|org|net|eu|at|ch|tv|io))\b/);
+      if (dm) return tabResult('https://' + dm[1], `Ich öffne ${dm[1]}.`, dm[1]);
+    }
+
+    // Karten, Bilder, Videos zeigen
+    const shown = showStuff(s);
+    if (shown) return shown;
+
+    // Webseiten
+    const siteMatch = t.match(/(you\s?tube|google|wikipedia)/);
+    const verbs = /(öffn|start|geh|zeig|such|find|spiel|schau|guck|navigier|ruf|was sagt|was steht)/;
+    if (siteMatch && (verbs.test(t) || new RegExp('^' + W, 'i').test(s))) {
+      const key = siteMatch[1].replace(/\s/g, '');
+      let q = '';
+      for (const re of SITE_PATS) {
+        const m = s.match(re);
+        if (m && m[1] && !/^(öffnen|starten|auf|bitte|an)$/i.test(m[1].trim())) { q = m[1].trim(); break; }
+      }
+      q = q.replace(/^(?:nach|über|zu)\s+/i, '').replace(new RegExp(String.raw`\s+(?:auf|bei|in)\s+${W}$`, 'i'), '').trim();
+      return openSite(key, q);
+    }
+
+    // Allgemeine Internetsuche
+    const searchPats = [
+      /(?:^|\b(?:du|bitte|mal)\s+)(?:such|recherchier)\w*\s+(?:mir\s+)?(?:im\s+(?:internet|web)\s+)?(?:nach\s+)?(.+)$/i,
+      /(?:im\s+(?:internet|web))\s+(?:nach\s+)?(.+?)(?:\s+(?:such|recherchier)\w*)?$/i,
+      /nach\s+(.+?)\s+(?:suchen|recherchieren)$/i
+    ];
+    for (const re of searchPats) {
+      const m = s.match(re);
+      if (m && m[1] && m[1].trim()) return webSearch(m[1].trim());
+    }
+
+    // Rechnen
+    const calc = tryMath(t);
+    if (calc) {
+      if (!Number.isFinite(calc.result)) return 'Das Ergebnis ist nicht berechenbar. Durch null kann man nicht teilen.';
+      const r = fmtNum(calc.result);
+      return { text: `${calc.exprText} = ${r}`, speech: `${calc.exprText} ergibt ${r}.` };
+    }
+
+    // Freies Gespräch mit KI, sonst Fragen googeln
+    if (getKey()) return askClaude(s);
+    if (/^(wer|was|wie|wo|wann|warum|wieso|weshalb|welche[rsmn]?|wieviel\w*)\b/.test(t)) return webSearch(s);
+
+    return 'Das habe ich leider nicht verstanden. Mit einem KI Schlüssel im Bereich KI Modus kann ich auch frei mit dir reden.';
+  }
+
+  function respond(res) {
+    if (typeof res === 'string') res = { text: res };
+    if (wakeMode && isAwake()) awakeUntil = Date.now() + AWAKE_MS;
+    addMsg('bot', res.text, res.link, res.img);
+    if (res.speak !== false) speak(res.speech || res.text);
+    if (res.sleep) { awakeUntil = 0; keepAwake = false; updateState(); }
+  }
+
+  async function handle(input) {
+    addMsg('user', input);
+    thinking++; updateState();
+    let res;
+    try { res = await route(input); }
+    catch (err) { console.error(err); res = 'Entschuldigung, da ist ein Fehler aufgetreten.'; }
+    thinking--; updateState();
+    respond(res);
+  }
+
+  /* ---------- Bedienung ---------- */
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const v = input.value.trim();
+    if (!v) return;
+    input.value = '';
+    handle(v);
+  });
+
+  micStart.addEventListener('click', () => {
+    audio();
+    if (!SR) return;
+    awakeUntil = Date.now() + AWAKE_MS;
+    const hello = wakeMode ? 'Systeme online. Sage Hey Jarvis, wenn du mich brauchst.' : 'Ich höre zu.';
+    addMsg('bot', hello);
+    speak(hello);
+    setMic(true);
+  });
+  micStop.addEventListener('click', () => {
+    setMic(false);
+    hint('Mikrofon aus.');
+  });
+  muteBtn.addEventListener('click', () => {
+    muted = !muted;
+    muteBtn.classList.toggle('on', muted);
+    muteBtn.textContent = muted ? 'Ton einschalten' : 'Stummschalten';
+    if (muted) stopSpeaking();
+    updateState();
+  });
+  clearBtn.addEventListener('click', () => {
+    chat.innerHTML = '';
+    pending = null;
+    convo.length = 0;
+    stopSpeaking();
+  });
+
+  function paintWake() {
+    wakeBtn.textContent = 'Hey Jarvis: ' + (wakeMode ? 'an' : 'aus');
+    wakeBtn.classList.toggle('on', wakeMode);
+  }
+  try { wakeMode = localStorage.getItem('jarvis_wake') !== '0'; } catch (e) {}
+  paintWake();
+  wakeBtn.addEventListener('click', () => {
+    wakeMode = !wakeMode;
+    try { localStorage.setItem('jarvis_wake', wakeMode ? '1' : '0'); } catch (e) {}
+    awakeUntil = 0;
+    paintWake(); updateState();
+    hint(wakeMode ? 'Sage Hey Jarvis, um mich zu wecken.' : 'Ich reagiere jetzt auf alles, was ich höre.');
+  });
+  setInterval(() => { if (micOn && wakeMode) updateState(); }, 1000);
+
+  camBtn.addEventListener('click', async () => {
+    if (camStream) { stopCam(); return; }
+    const err = await startCam();
+    if (err) addMsg('bot', err);
+  });
+  photoBtn.addEventListener('click', async () => { respond(await takePhoto()); });
+
+  function paintKey() {
+    keyState.textContent = 'KI-Modus nutzt die sichere Netlify-Verbindung. Der API-Schlüssel wird nicht auf diesem Gerät gespeichert.';
+  }
+  paintKey();
+  keySave.addEventListener('click', () => {
+    keyInput.value = '';
+    addMsg('sys', 'Aus Sicherheitsgründen wird der API-Schlüssel nicht im Browser gespeichert. Hinterlege OPENAI_API_KEY in den Netlify Environment variables.');
+    paintKey();
+  });
+  keyRemove.addEventListener('click', () => {
+    try { localStorage.removeItem('jarvis_key'); } catch (e) {}
+    convo.length = 0; paintKey();
+  });
+
+  const EXAMPLES = [
+    'Wie spät ist es?', 'Welches Datum haben wir?', 'Wetter in Berlin', 'Was ist 12 mal 7?',
+    'Wurzel aus 144', '20 Prozent von 80', 'Timer 5 Minuten', 'Timer abbrechen',
+    'Notiz speichern Mathe Hausaufgaben', 'Notizen vorlesen', 'Letzte Notiz löschen', 'Alle Notizen löschen',
+    'Erzähl mir einen Witz', 'Münze werfen', 'Würfel', 'Würfel mit 20 Seiten',
+    'YouTube öffnen', 'YouTube suche Lofi Musik', 'Wikipedia Albert Einstein', 'Google öffnen',
+    'Suche im Internet nach Klimawandel', 'Öffne Spotify', 'Öffne WhatsApp', 'Zeig mir Bilder von Katzen',
+    'Route nach Hamburg', 'Video über Photosynthese', 'Kamera einschalten', 'Mach ein Foto', 'Was siehst du?'
+  ];
+  const chips = $('#chips');
+  EXAMPLES.forEach(x => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = x;
+    b.addEventListener('click', () => { audio(); handle(x); });
+    chips.appendChild(b);
+  });
+
+  /* ---------- Start ---------- */
+  initRec();
+  if (!SR) {
+    micStart.disabled = true;
+    addMsg('bot', 'Dein Browser unterstützt keine Spracherkennung. Nutze Chrome, Edge oder Safari für das Mikrofon. Die Eingabe per Tastatur funktioniert trotzdem.');
+  }
+  if (!('speechSynthesis' in window)) {
+    addMsg('bot', 'Dein Browser unterstützt keine Sprachausgabe. Ich antworte dann nur als Text.');
+  }
+  addMsg('bot', 'Hallo, ich bin Jarvis. Klicke auf Mikrofon starten und sage dann Hey Jarvis, oder tippe deinen Befehl ein.');
+  updateState();
+})();
+</script>
+</body>
+</html>
